@@ -446,7 +446,11 @@ sub parse {
       }
 
       for (my $i = $from; $i <= $to; $i += $step) {
-        push @values, $i;
+        if ($type eq 'dow' && $i eq '7') {
+          push @values, '0';
+        } else {
+          push @values, $i;
+        }
       }
 
     } else {
