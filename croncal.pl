@@ -21,12 +21,17 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
+#
+# this copy optained from https://github.com/waldner/croncal.git
 
 use warnings;
 use strict;
 
 use Time::Local;
 use Getopt::Std;
+use DateTime;
+
+use POSIX qw(tzset);
 
 my @monthmap = ( 'january|jan', 'february|feb', 'march|mar', 'april|apr', 'may', 'june|jun', 'july|jul', 'august|aug', 'september|sep', 'october|oct', 'november|nov', 'december|dec' );
 my @dowmap = ( 'sunday|sun', 'monday|mon', 'tuesday|tue', 'wednesday|wed', 'thursday|thu', 'friday|fri', 'saturday|sat' );
@@ -49,8 +54,10 @@ my $plainformat = "%04d-%02d-%02d %02d:%02d%.0s|%s\n";
 
 my %calendar = ();
 
+my $timezone = DateTime->now()->time_zone_long_name();
 
-getopts('s:e:d:f:o:xh', \%opts);
+
+getopts('s:e:d:f:o:xt:h', \%opts);
 
 if (exists($opts{h})) {
   show_help();
@@ -100,6 +107,10 @@ if (exists($opts{f})) {
 
 if (exists($opts{o})) {
   $outformat = $opts{o};
+}
+
+if (exists($opts{t})) {
+  $timezone = $opts{t};
 }
 
 if (exists($opts{x}) and $outformat ne 'count') {
@@ -201,6 +212,10 @@ while (<>) {
   }
 }
 
+# set the timezone
+#
+$ENV{TZ} = $timezone;
+tzset;
 
 # now, check what is due when
 for (my $second = $startsec; $second < $endsec; $second += 60) {
@@ -289,6 +304,7 @@ sub show_help {
   print STDERR "-f cronfile  : cron file to read (default: stdin)\n";
   print STDERR "-o format    : output format. Can be 'plain', 'ical' or 'count' (default: plain)\n";
   print STDERR "-x           : adds extra info (scheduling elements from original file). Ignored if output format is 'count'. Default: no extra info\n";
+  print STDERR "-x tz_name   : sets time_zone for output\n";
   print STDERR "-h           : show this help\n";
   print STDERR "\n";
   print STDERR "Example: $progname -f /var/spool/cron/user1 -s '2012-07-24 00:00' -d 7200 -o ical\n";
