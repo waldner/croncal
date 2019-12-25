@@ -43,7 +43,9 @@ We want to see the job timeline for the time range between **`2012-06-09 00:00`*
 2012-06-11 14:00|job3
 </pre>
 
-That's basically the idea of the program. Running it with **`-h`** will print a summary of the options it accepts. Output can be in **icalendar** format (so the timeline can be visually seen with any calendar application), plain as above, or we can just print how many jobs would run at each time. When using the plain or icalendar formats, mostly as a debugging aid, it's possible to print the job scheduling spec as was originally found in the crontab file. This is done with the **`-x`** switch, example follows:
+That's basically the idea of the program. To use a different timezone, just set the `TZ` environment variable before running the code, eg `TZ=America/New_York croncal.pl <options>...`.
+
+Running it with **`-h`** will print a summary of the options it accepts. Output can be in **icalendar** format (so the timeline can be visually seen with any calendar application), plain as above, or we can just print how many jobs would run at each time. When using the plain or icalendar formats, mostly as a debugging aid, it's possible to print the job scheduling spec as was originally found in the crontab file. This is done with the **`-x`** switch, example follows:
 
 <pre>
 <b>$ croncal.pl -s '2012-06-09 00:00' -e '2012-06-12 00:00' -f /path/to/crontab -x</b>
