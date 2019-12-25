@@ -32,6 +32,7 @@ use Getopt::Std;
 use DateTime;
 
 use POSIX qw(tzset);
+use POSIX;
 
 my @monthmap = ( 'january|jan', 'february|feb', 'march|mar', 'april|apr', 'may', 'june|jun', 'july|jul', 'august|aug', 'september|sep', 'october|oct', 'november|nov', 'december|dec' );
 my @dowmap = ( 'sunday|sun', 'monday|mon', 'tuesday|tue', 'wednesday|wed', 'thursday|thu', 'friday|fri', 'saturday|sat' );
@@ -42,10 +43,6 @@ my %opts;
 
 # default values
 
-# 1 day from now by default
-my $startsec = int(time / 60) * 60;
-my $endsec;
-my $duration = 86400;
 
 my $outformat = 'plain';
 my $xtrainfo = 0;
@@ -54,7 +51,7 @@ my $plainformat = "%04d-%02d-%02d %02d:%02d%.0s|%s\n";
 
 my %calendar = ();
 
-my $timezone = DateTime->now()->time_zone_long_name();
+my $timezone = strftime("%Z", localtime());
 
 
 getopts('s:e:d:f:o:xt:h', \%opts);
@@ -63,6 +60,16 @@ if (exists($opts{h})) {
   show_help();
   exit 1;
 }
+
+if (exists($opts{t})) {
+  $timezone = $opts{t};
+  $ENV{TZ} = $timezone;
+}
+
+# 1 day from now by default - this is located here in case option t is used
+my $startsec = int(time / 60) * 60;
+my $endsec;
+my $duration = 86400;
 
 if (exists($opts{e}) and exists($opts{d})) {
   print STDERR "Can't use -e and -d together\n";
@@ -107,10 +114,6 @@ if (exists($opts{f})) {
 
 if (exists($opts{o})) {
   $outformat = $opts{o};
-}
-
-if (exists($opts{t})) {
-  $timezone = $opts{t};
 }
 
 if (exists($opts{x}) and $outformat ne 'count') {
@@ -212,10 +215,6 @@ while (<>) {
   }
 }
 
-# set the timezone
-#
-$ENV{TZ} = $timezone;
-tzset;
 
 # now, check what is due when
 for (my $second = $startsec; $second < $endsec; $second += 60) {
