@@ -303,7 +303,7 @@ sub show_help {
   print STDERR "-f cronfile  : cron file to read (default: stdin)\n";
   print STDERR "-o format    : output format. Can be 'plain', 'ical' or 'count' (default: plain)\n";
   print STDERR "-x           : adds extra info (scheduling elements from original file). Ignored if output format is 'count'. Default: no extra info\n";
-  print STDERR "-x tz_name   : sets time_zone for output\n";
+  print STDERR "-t tz_name   : sets time_zone for output\n";
   print STDERR "-h           : show this help\n";
   print STDERR "\n";
   print STDERR "Example: $progname -f /var/spool/cron/user1 -s '2012-07-24 00:00' -d 7200 -o ical\n";
