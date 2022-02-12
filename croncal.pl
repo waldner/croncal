@@ -137,7 +137,7 @@ while (<>) {
 
   if (/^(@(reboot|yearly|annually|monthly|weekly|daily|hourly))\s+(.*)/i) {
 
-    my $type = $2;
+    my $type = lc($2);
     $parsed{sched_orig} = $1;
 
     if ($type eq 'yearly' or $type eq 'annually') {
@@ -163,7 +163,7 @@ while (<>) {
     $parsed{sched_orig} = $1;
 
     # regular entry
-    %raw = ('min' => $2, 'hour' => $3, 'dom' => $4, 'month' => $5, 'dow' => $6, 'command' => $7);
+    %raw = ('min' => $2, 'hour' => $3, 'dom' => $4, 'month' => lc($5), 'dow' => lc($6), 'command' => $7);
 
   } else {
     print STDERR "Warning, skipping unrecognized crontab line $.: $_\n";
@@ -176,7 +176,7 @@ while (<>) {
   
   for my $type (qw(min hour dom month dow)) {
 
-    my ($errmsg, @result) = parse($raw{$type}, $type);
+    my ($errmsg, $result_ref) = parse($raw{$type}, $type);
 
     if ($errmsg ne "") {
       print STDERR "Parsing line $.: $errmsg, skipping line\n";
@@ -184,10 +184,7 @@ while (<>) {
       last;
     }
 
-    # silly way to create a hash and remove duplicates
-    $parsed{$type} = { map { $_, '' } @result };
-
-    # save original field value
+    $parsed{$type} = $result_ref;
     $parsed{"${type}_orig"} = $raw{$type};
   }
 
@@ -201,6 +198,12 @@ while (<>) {
   }
 }
 
+#use Data::Dumper;
+#print Dumper(\@joblist);
+#exit;
+
+my $prevmonth = -1;
+my $table_ref = ();
 
 # now, check what is due when
 for (my $second = $startsec; $second < $endsec; $second += 60) {
@@ -210,14 +213,21 @@ for (my $second = $startsec; $second < $endsec; $second += 60) {
   $month++;
   $year += 1900;
 
-  for my $parsed (@joblist) {
+  if ($month != $prevmonth) {
+    $table_ref = get_month_table($month, $year); 
+    $prevmonth = $month;   
+  }
 
-    if (isdue($day, $month, $year, $dow, $hour, $min, $parsed)) {
+  for my $parsed (@joblist) {
+    if (isdue($day, $month, $year, $dow, $hour, $min, $parsed, $table_ref)) {
       push @{$calendar{$year}{$month}{$day}{$hour}{$min}}, $parsed;
     }
   }
 }
 
+#use Data::Dumper;
+#print Dumper(\%calendar);
+#exit;
 
 # Finally, print the resulting calendar
 
@@ -295,6 +305,51 @@ sub show_help {
 
 }
 
+sub get_month_table {
+
+  my ($month, $year) = (shift, shift);
+  my %table = ();
+
+  my $day = 1;
+
+  my $startsec = parsedate(sprintf("%04d-%02d-01 00:00", $year, $month));
+
+  my $prevmonth = $month;
+
+  my %count = (0 => 1, 1 => 1, 2 => 1, 3 => 1, 4 => 1, 5 => 1, 6 => 1);
+
+  # loop over all days of month until the month changes
+  while(1) {
+    my ($dummy1, $dummy2, $dummy3, $day, $month, $year, $dow, $dummy4, $dummy5) = localtime($startsec);
+
+    $month++;
+    $year += 1900;
+
+    if ($month != $prevmonth) {
+      last;
+    }
+    $prevmonth = $month;
+
+    $table{$day} = [ $dow, $count{$dow} ];
+    $count{$dow}++;
+    $startsec += 86400;
+  } 
+
+  # also add position from the end
+  %count = (0 => -1, 1 => -1, 2 => -1, 3 => -1, 4 => -1, 5 => -1, 6 => -1);
+  for my $day (reverse sort { $a <=> $b} keys %table) {
+    my $dow = ${$table{$day}}[0];
+    push @{ $table{$day} }, $count{$dow};
+    $count{$dow}--;
+  }
+ 
+
+  return \%table;
+}
+
+
+
+
 #          field          allowed values
 #              -----          --------------
 #              minute         0-59
@@ -355,7 +410,7 @@ sub parse {
   } elsif ($type eq 'dow') {
     ($min, $max, $desc) = (0, 6, 'day of week');    # 0 or 7 is sunday, 7 is silently converted to 0
   } else {
-    return "field - $field - of (unrecognized) type $type: cannot happen!", ();
+    return "field - $field - of (unrecognized) type $type: cannot happen!", [];
   }
 
   # expand stars
@@ -377,7 +432,8 @@ sub parse {
   }
 
   # At this point it should be a list of items (possibly one), each of which
-  # is either a single number, a range (3-7), or a step interval (2-30/4)
+  # is either a single number, a range (3-7), a n#m construct (dow only; the m-th "n" of the month)
+  # or a step interval (2-30/4)
   # Ranges and step intervals can be further expanded to lists: 3-7 becomes
   # 3,4,5,6,7 and 2-30/4 becomes 2,6,10,14,18,22,26,30
   # At the end, we have just a long list of values.
@@ -386,9 +442,39 @@ sub parse {
 
   my @items = split(/,/, $field);
 
-  my @values = ();
+  my %values = ();
 
   for my $item (@items) {
+
+    if ($type eq 'dow' and $item =~ /^(\d+)#(-?\d+|L|l|LAST|last)$/) {
+      my ($dow, $n) = ($1, $2);
+      if ($dow eq '7') {
+        $dow = '0';
+      }
+
+      if ($dow >= $min and $dow <= $max) {
+
+        # remove leading zeros (but leave a single 0 if there's nothing else)
+        $dow =~ s/^0+(\d)/$1/;
+
+        if (lc($n) eq "l" or lc($n) eq "last") {
+          $n = -1;
+        }
+        if ($n == 0) {
+          return "invalid value $item for field - $field - of type $type", [];
+        }
+        
+        if ((!exists($values{$dow})) or ((defined $values{$dow}) and (scalar(@{$values{$dow}}) > 0))) {
+          my $exists = grep { $_ == $n } @{$values{$dow}};
+          if (!$exists) {
+            push @{$values{$dow}}, $n;
+          }
+        }
+        next;
+      } else {
+        return "invalid value $item for field - $field - of type $type", [];
+      }
+    }
 
     if ($item =~ /^\d+$/) {
 
@@ -403,10 +489,10 @@ sub parse {
         # remove leading zeros (but leave a single 0 if there's nothing else)
         $item =~ s/^0+(\d)/$1/;
 
-        push @values, $item;
+        $values{$item} = [];
         next;
       } else {
-        return "invalid value $item for field - $field - of type $type", ();
+        return "invalid value $item for field - $field - of type $type", [];
       }
     }
 
@@ -417,19 +503,19 @@ sub parse {
       $step = $1;
       $step =~ s/^0+(\d)/$1/;
       if ($step eq '0') {
-        return "step cannot be zero for field - $field - of type $type", ();
+        return "step cannot be zero for field - $field - of type $type", [];
       }
       $item =~ s{/(\d+)$}{};
       $item =~ s/^0+(\d)/$1/;
 
     } elsif ($item =~ m{/}) {
-      return "unrecognized step format for field - $field - of type $type", ();
+      return "unrecognized step format for field - $field - of type $type", [];
     } else {
       $step = 1;
     }
 
     if ($step > ($max - $min)) {
-      return "too big step value $step for field - $field - of type $type", ();
+      return "too big step value $step for field - $field - of type $type", [];
     }
 
     # now, expand the range...
@@ -442,31 +528,31 @@ sub parse {
       $to =~ s/^0+(\d)/$1/;
 
       if ($from > $to) {
-        return "start value $from greater than end value $to for field - $field - of type $type", ();
+        return "start value $from greater than end value $to for field - $field - of type $type", [];
       }
 
       for (my $i = $from; $i <= $to; $i += $step) {
-        if ($type eq 'dow' && $i eq '7') {
-          push @values, '0';
+        if ($type eq 'dow' && $i eq 7) {
+          $values{0} = [];
         } else {
-          push @values, $i;
+          $values{$i} = [];
         }
       }
 
     } else {
-      return "invalid range/not a range for field - $field - of type $type", ();
+      return "invalid range/not a range for field - $field - of type $type", [];
     }
 
   }
 
-  return "", @values;
+  return "", \%values;
 }
 
 # given a crontab entry and a date, returns true
 # if the task has to be executed
 sub isdue {
 
-  my ($day, $month, $year, $dow, $hour, $min, $parsedref) = (shift, shift, shift, shift, shift, shift, shift);
+  my ($day, $month, $year, $dow, $hour, $min, $parsedref, $tableref) = (shift, shift, shift, shift, shift, shift, shift, shift);
 
   # we have to run if:
 
@@ -485,6 +571,7 @@ sub isdue {
   # $month is included in the month list
 
   my %parsed = %{$parsedref};
+  my %table = %{$tableref};
 
   # yes, if one used 1-31, or 1-6,7-31 or 0-6 or whatever, it's not the
   # same as specifying a real star. It's easy to enhance the code to
@@ -492,18 +579,37 @@ sub isdue {
 
   my ($stardom, $stardow) = ($parsed{dom_orig} eq '*', $parsed{dow_orig} eq '*');
 
+  #use Data::Dumper;
+  #print Dumper(\%parsed);
+
+  if ($table{$day}->[0] != $dow) {
+    print("ERROR: for table, day $day is $table{$day}->[0], but we received $dow\n");
+    exit;
+  }
+
+  my ($posf, $posb) = ($table{$day}->[1], $table{$day}->[2]);
+
+  my $existsdow = exists($parsed{dow}{$dow});
+  my $dowok = ($existsdow and ((!@{$parsed{dow}{$dow}}) or (grep { $_ == $posf } @{$parsed{dow}{$dow}}) or (grep { $_ == $posb } @{$parsed{dow}{$dow}})));
+
+  #print("year $year, month $month, day $day, hour $hour, min $min, dow $dow, posf $posf, posb $posb, existsdow $existsdow, dowok $dowok\n");
+
   return (exists($parsed{min}{$min}) and
           exists($parsed{hour}{$hour}) and
           exists($parsed{month}{$month}) and
 
-          # silly dom/dow logic
+          # silly dom/dow logic, including n#m stuff
           
          ( ($stardom and $stardow) or
-           (not $stardom and not $stardow and (exists($parsed{dom}{$day}) or exists($parsed{dow}{$dow}))) or
+
+           (not $stardom and not $stardow and (exists($parsed{dom}{$day}) or $dowok) ) or
+
            (not $stardom and exists($parsed{dom}{$day})) or
-           (not $stardow and exists($parsed{dow}{$dow})) ));
+
+           (not $stardow and $dowok) ) );
 
 }
+
 
 # gets a date in YYYY-MM-DD HH:MM format, returns
 # the number of seconds from epoch, or 0 if the date is not valid
