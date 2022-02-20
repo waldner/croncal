@@ -446,33 +446,16 @@ sub parse {
 
   for my $item (@items) {
 
-    if ($type eq 'dow' and $item =~ /^(\d+)#(-?\d+|L|l|LAST|last)$/) {
-      my ($dow, $n) = ($1, $2);
-      if ($dow eq '7') {
-        $dow = '0';
+    #if ($type eq 'dow' and $item =~ /^(\d+)#(-?\d+|L|l|LAST|last)$/) {
+    my $condition = undef;
+    if ($type eq 'dow' and $item =~ /#(-?\d+|L|l|LAST|last)$/) {
+      $condition = $1;
+      $item =~ s/#.*//;
+      if (lc($condition) eq "l" or lc($condition) eq "last") {
+        $condition = -1;
       }
-
-      if ($dow >= $min and $dow <= $max) {
-
-        # remove leading zeros (but leave a single 0 if there's nothing else)
-        $dow =~ s/^0+(\d)/$1/;
-
-        if (lc($n) eq "l" or lc($n) eq "last") {
-          $n = -1;
-        }
-        if ($n == 0) {
-          return "invalid value $item for field - $field - of type $type", [];
-        }
-        
-        if ((!exists($values{$dow})) or ((defined $values{$dow}) and (scalar(@{$values{$dow}}) > 0))) {
-          my $exists = grep { $_ == $n } @{$values{$dow}};
-          if (!$exists) {
-            push @{$values{$dow}}, $n;
-          }
-        }
-        next;
-      } else {
-        return "invalid value $item for field - $field - of type $type", [];
+      if ($condition == 0) {
+        return "invalid value $condition for dow selection", [];
       }
     }
 
@@ -489,7 +472,16 @@ sub parse {
         # remove leading zeros (but leave a single 0 if there's nothing else)
         $item =~ s/^0+(\d)/$1/;
 
-        $values{$item} = [];
+        if ($type eq 'dow' and defined($condition)) {
+          if ((!exists($values{$item})) or ((defined $values{$item}) and (scalar(@{$values{$item}}) > 0))) {
+            my $exists = grep { $_ == $condition } @{$values{$item}};
+            if (!$exists) {
+              push @{$values{$item}}, $condition;
+            }
+          }
+        } else {
+          $values{$item} = [];
+        }
         next;
       } else {
         return "invalid value $item for field - $field - of type $type", [];
@@ -532,8 +524,21 @@ sub parse {
       }
 
       for (my $i = $from; $i <= $to; $i += $step) {
-        if ($type eq 'dow' && $i eq 7) {
-          $values{0} = [];
+
+        if ($type eq 'dow' and defined($condition)) {
+          if ((!exists($values{$i})) or ((defined $values{$i}) and (scalar(@{$values{$i}}) > 0))) {
+            my $exists = grep { $_ == $condition } @{$values{$i}};
+            if (!$exists) {
+              push @{$values{$i}}, $condition;
+            }
+          } else {
+
+            if ($i eq 7) {
+              $values{0} = [];
+            } else {
+              $values{$i} = [];
+            }
+          }
         } else {
           $values{$i} = [];
         }

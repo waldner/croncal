@@ -76,3 +76,9 @@ Final words of caution:
 
 * If you run the program over a long period of time and have cron jobs that run very often, like **`* * * * *`** or similar, that will produce **_a lot_** of output.
 * The program was written as a quick and dirty way to solve a specific need, "works for me", is not optimized and does not try to be particularly smart of flexible. It may not be exactly what you were looking for, or may not do what you want, or in the way you want. That's life. Hopefully, it may still be useful to someone.
+
+### Testing
+
+To test, you need to install [shellspec](https://github.com/shellspec). With that installed, just run `./run_tests.sh` and all tests should pass.
+
+To write new tests (please submit so we can add them!), have a look at the `tests/` directory, each file represents a test and contains three blocks (separated by `---`), in this order: start/end timestamp (two lines), input crontab (variable length), expected output (variable length). To create new tests, just add new files in there with the same format.
