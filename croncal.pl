@@ -233,7 +233,7 @@ for (my $second = $startsec; $second < $endsec; $second += 60) {
 
 if ($outformat eq 'ical') {
   print "BEGIN:VCALENDAR\n";
-  print "VERSION:1.0\n";
+  print "VERSION:2.0\n";
 }
 
 for my $year (sort { $a <=> $b} keys %calendar) {
